@@ -10,8 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
 <script src="config.js"></script>
-<script src="local-db.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4"></script>
 <meta name="apple-mobile-web-app-title" content="ביקורות הרבנות">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -243,8 +242,7 @@ const ico=n=>`<svg viewBox="0 0 24 24">${IC[n]}</svg>`;
 
 /* ============ חיבור למסד הנתונים (Supabase) ============ */
 const CFG=window.APP_CONFIG||{};
-const sb=(window.supabase&&CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY)?window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):(window.LocalDB||null);
-const LOCAL=!!(sb&&sb.isLocal);
+const sb=(window.supabase&&CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY)?window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 const BUCKET='photos';
 /* ============ מצב ============ */
 const S={uid:null,email:'',profile:null,admin:false,profiles:{},audits:{all:[]},defects:[],settings:{},loaded:false,slow:false,err:null,cur:null,online:navigator.onLine,view:'home',save:{state:'idle'},auth:'loading',authTab:'login'};
@@ -327,7 +325,7 @@ function showAuth(){
   const m=$('#main'),a=S.auth;
   const head=`<div class="hero"><img src="${EMBLEM}" alt="סמל רבנות אוגמ״ר 96" onerror="this.onerror=null;this.src='${EMBLEM_FB}'"><h1>מערכת ביקורות הרבנות</h1><div class="sub">רבנות אוגמ״ר 96</div></div><div class="slogan">כשרות זה מקצוע – והיה מחנך קדוש</div>`;
   let b='';
-  if(a==='nocfg')b=`<div class="banner warn"><b>האפליקציה עדיין לא חוברה למסד הנתונים.</b><br>יש להשלים את שלב ההגדרה (כתובת Supabase ומפתח ציבורי בקובץ config.js).</div>`;
+  if(a==='nocfg')b=(CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY)?`<div class="banner warn"><b>לא ניתן להתחבר לשרת.</b><br>בדוק את החיבור לאינטרנט ונסה שוב.</div><button class="btn block" onclick="location.reload()">נסה שוב</button>`:`<div class="banner warn"><b>האפליקציה עדיין לא חוברה למסד הנתונים.</b><br>יש להשלים את שלב ההגדרה (כתובת Supabase ומפתח ציבורי בקובץ config.js).</div>`;
   else if(a==='offline')b=`<div class="banner warn">אין חיבור לשרת. בדוק את האינטרנט ונסה שוב.</div><button class="btn block" onclick="location.reload()">נסה שוב</button>`;
   else if(a==='pending'){const rej=S.profile&&S.profile.rejected;b=`<div class="authbox"><h3 style="color:var(--bd)">${rej?'בקשת ההצטרפות לא אושרה':'בקשת ההצטרפות התקבלה ✓'}</h3>
      <p>${rej?'מנהל המערכת לא אישר את הבקשה. לפרטים נוספים פנה לרבנות אוגמ״ר 96.':'הבקשה שלך ממתינה לאישור מנהל המערכת. לאחר האישור תוכל להיכנס ולעבוד במערכת.'}</p>
@@ -579,7 +577,7 @@ function updPill(){
   const p=$('#pill');if(!p||!S.cur)return;
   if(!S.cur.editable){p.className='pill';p.textContent='צפייה בלבד';return}
   const s=S.save.state;
-  const m={idle:['','טרם נשמר'],saving:['warn','שומר…'],saved:['ok',LOCAL?'נשמר במכשיר ✓':'נשמר בשרת ✓'],local:['warn',S.online?'נשמר במכשיר':'לא מקוון – נשמר במכשיר'],error:['bad','שגיאת שמירה']}[s]||['',''];
+  const m={idle:['','טרם נשמר'],saving:['warn','שומר…'],saved:['ok','נשמר בשרת ✓'],local:['warn',S.online?'נשמר במכשיר':'לא מקוון – נשמר במכשיר'],error:['bad','שגיאת שמירה']}[s]||['',''];
   p.className='pill '+m[0];p.textContent=m[1];
 }
 /* אירועי טופס */

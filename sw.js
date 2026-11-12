@@ -1,7 +1,7 @@
 // Service worker: טעינה מהירה והתקנה כאפליקציה. נתוני המערכת עצמם לעולם לא נשמרים כאן.
-const CACHE = 'ogmar96-v1';
-const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'local-db.js', 'emblem-512.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
+const CACHE = 'ogmar96-v2-auth';
+const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'emblem-512.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => Promise.allSettled(SHELL.map(u => c.add(u)))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

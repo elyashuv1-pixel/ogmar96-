@@ -1,8 +1,7 @@
-// הגדרות חיבור למסד הנתונים של אוגמ״ר 96 – פרויקט Supabase חדש ונפרד (לא של רבנות פקמ״ז).
-// כל עוד השדות ריקים, האפליקציה עובדת במצב מקומי: הכול נשמר במכשיר (כולל תמונות).
-// לחיבור: צור פרויקט Supabase חדש, הרץ את supabase/schema.sql, ומלא כאן Project URL ו-anon public key.
-// אין לשים כאן לעולם את ה-service_role key.
+// הגדרות חיבור למסד הנתונים של אוגמ״ר 96 – פרויקט Supabase נפרד (לא של rab96 / רבנות פקמ״ז).
+// שני הערכים ציבוריים בכוונה (Project URL ו-Publishable key) – האבטחה נאכפת במסד הנתונים עצמו (RLS, supabase/schema.sql).
+// אין לשים כאן לעולם מפתח סודי (sb_secret_… או service_role).
 window.APP_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: ""
+  SUPABASE_URL: "https://yxqkeybynyrzdchhoaaz.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_dN5etFxhiBTPgCG4gEWELA_7YzFc6ds"
 };

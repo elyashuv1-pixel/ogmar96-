@@ -895,7 +895,7 @@ function renderUsers(){
    <div class="card"><div class="hist">${logRows.map(l=>`<div>${fmtDT(l.at)} · ${esc(nameOf(l.actor))} · ${esc(LOGTXT[l.entity+':'+l.action]||(l.entity+' '+l.action))} <span class="ltr">${esc(l.entity_id||'')}</span></div>`).join('')||'אין רשומות'}</div></div>`;
   document.querySelectorAll('#dyn input:not([type=file]),#dyn select').forEach(x=>{const k=x.id||Object.keys(x.dataset).map(d=>d+'='+x.dataset[d]).join('|');if(k in keep){if(x.type==='checkbox')x.checked=keep[k];else x.value=keep[k]}});
 }
-const LOGTXT={'audits:insert':'ביקורת נוצרה','audits:update':'ביקורת עודכנה','audits:delete':'ביקורת נמחקה','defects:insert':'ליקוי נפתח','defects:update':'ליקוי עודכן','defects:delete':'ליקוי נמחק','profiles:update':'פרטי משתמש עודכנו','profiles:delete':'משתמש נמחק','profile:bootstrap_admin':'מנהל המערכת הראשון נרשם','profile:invite_claimed':'משתמש הפעיל הזמנה','profile:join_approved':'בקשת הצטרפות אושרה','profile:join_rejected':'בקשת הצטרפות נדחתה','profile:promoted_to_admin_via_sql':'מנהל הוגדר מלוח הבקרה','sb_briefings:insert':'תדריך שבת נפתח','sb_briefings:update':'תדריך שבת עודכן','sb_briefings:delete':'תדריך שבת נמחק','sb_briefings:presenter_signed':'מעביר התדריך חתם','sb_briefings:locked':'תדריך שבת אושר וננעל','sb_briefings:new_version':'נוצרה גרסה מתוקנת לתדריך','sb_briefings:export_pdf':'הופק PDF של תדריך שבת','sb_briefings:cancelled':'תדריך שבת בוטל והועבר לארכיון המבוטלים','sb_participants:insert':'משתתף נוסף לתדריך','sb_participants:update':'משתתף בתדריך עודכן','sb_participants:delete':'משתתף הוסר מתדריך','sb_participants:signed':'משתתף חתם על תדריך','sb_templates:template_saved':'תבנית תדריך עודכנה'};
+const LOGTXT={'audits:insert':'ביקורת נוצרה','audits:update':'ביקורת עודכנה','audits:delete':'ביקורת נמחקה','defects:insert':'ליקוי נפתח','defects:update':'ליקוי עודכן','defects:delete':'ליקוי נמחק','profiles:update':'פרטי משתמש עודכנו','profiles:delete':'משתמש נמחק','profile:bootstrap_admin':'מנהל המערכת הראשון נרשם','profile:invite_claimed':'משתמש הפעיל הזמנה','profile:join_approved':'בקשת הצטרפות אושרה','profile:join_rejected':'בקשת הצטרפות נדחתה','profile:promoted_to_admin_via_sql':'מנהל הוגדר מלוח הבקרה','sb_briefings:insert':'תדריך שבת נפתח','sb_briefings:update':'תדריך שבת עודכן','sb_briefings:delete':'תדריך שבת נמחק','sb_briefings:presenter_signed':'מעביר התדריך חתם','sb_briefings:locked':'תדריך שבת אושר וננעל','sb_briefings:new_version':'נוצרה גרסה מתוקנת לתדריך','sb_briefings:export_pdf':'הופק PDF של תדריך שבת','sb_briefings:cancelled':'תדריך שבת בוטל והועבר לארכיון המבוטלים','sb_briefings:purged':'תדריך שבת מבוטל נמחק לצמיתות','sb_participants:insert':'משתתף נוסף לתדריך','sb_participants:update':'משתתף בתדריך עודכן','sb_participants:delete':'משתתף הוסר מתדריך','sb_participants:signed':'משתתף חתם על תדריך','sb_templates:template_saved':'תבנית תדריך עודכנה'};
 async function downloadBackup(){
   toast('מכין גיבוי…');
   const [a,d,p]=await Promise.all([sb.from('audits').select('*'),sb.from('defects').select('*'),sb.from('profiles').select('*')]);
@@ -1298,11 +1298,12 @@ function sbShowGaps(id){
 function sbMenuItems(b){const out=[];if(!b||!canWriteShared())return out;
   if(b.status==='draft'&&(b.owner===S.uid||S.admin))out.push(['del','🗑️ מחק תדריך']);
   if(b.status==='locked'&&!b.cancelled_at&&S.admin)out.push(['cancel','העברה לארכיון מבוטל']);
+  if(b.status==='locked'&&b.cancelled_at&&S.admin)out.push(['purge','🗑️ מחק תדריך מבוטל']);
   return out}
 function sbMenu(id){
   const b=SB.list.find(x=>x.id===id);if(!b)return;const it=sbMenuItems(b);if(!it.length)return;
-  const m=modal(`<h3>${b.report_no?esc(b.report_no):'טיוטה'} · ${esc(b.unit||'ללא יחידה')}</h3><div class="acts" style="flex-direction:column">${it.map(([k,l])=>`<button class="btn ${k==='del'?'danger':''}" data-m="${k}">${l}</button>`).join('')}<button class="btn ghost" data-m="x">סגירה</button></div>`);
-  m.addEventListener('click',e=>{const x=e.target.closest('[data-m]');if(!x)return;m.remove();if(x.dataset.m==='del')sbDelete(id);else if(x.dataset.m==='cancel')sbCancel(id)});
+  const m=modal(`<h3>${b.report_no?esc(b.report_no):'טיוטה'} · ${esc(b.unit||'ללא יחידה')}</h3><div class="acts" style="flex-direction:column">${it.map(([k,l])=>`<button class="btn ${k==='del'||k==='purge'?'danger':''}" data-m="${k}">${l}</button>`).join('')}<button class="btn ghost" data-m="x">סגירה</button></div>`);
+  m.addEventListener('click',e=>{const x=e.target.closest('[data-m]');if(!x)return;m.remove();if(x.dataset.m==='del')sbDelete(id);else if(x.dataset.m==='cancel')sbCancel(id);else if(x.dataset.m==='purge')sbPurge(id)});
 }
 function sbAfterChange(){if(S.view==='sb-archive')sbArchive();else if(S.view==='shabbat')sbHub()}
 async function sbDelete(id){
@@ -1319,6 +1320,23 @@ async function sbDelete(id){
   }catch(e){toast('המחיקה נכשלה: '+sbErrText(e),5000);return}
   SB.list=SB.list.filter(x=>x.id!==id);LS.del('ogmar96:sb:'+id);if(SB.cur&&SB.cur.id===id){SB.cur=null;SB.parts=[];SB.dirty=false}
   toast('התדריך נמחק');sbAfterChange();
+}
+async function sbPurge(id){
+  const b=SB.list.find(x=>x.id===id);if(!b||!S.admin)return;
+  if(!b.cancelled_at){toast('ניתן למחוק כך רק תדריך שבוטל');return}
+  if(!await ask('מחיקת תדריך מבוטל',`<p>האם אתה בטוח שברצונך למחוק את התדריך?</p><p class="small">התדריך <b class="ltr">${esc(b.report_no||'')}</b>, המשתתפים והחתימות יימחקו לצמיתות, ולא ניתן יהיה לשחזר אותם. המחיקה תירשם ביומן.</p>`,'אישור מחיקה',true))return;
+  try{
+    const r0=await sb.from('sb_briefings').select('presenter_sig,status,cancelled_at').eq('id',id).maybeSingle();if(r0.error)throw r0.error;
+    if(!r0.data)throw new Error('התדריך לא נמצא');if(!r0.data.cancelled_at)throw new Error('ניתן למחוק כך רק תדריך שבוטל');
+    const ch=await sb.from('sb_briefings').select('id').eq('supersedes',id);if(ch.error)throw ch.error;
+    if((ch.data||[]).length)throw new Error('קיימת גרסה מתוקנת שנוצרה מהתדריך הזה, ולכן אי אפשר למחוק אותו');
+    const p=await sb.from('sb_participants').select('sig_path').eq('briefing_id',id);if(p.error)throw p.error;
+    const files=[...(p.data||[]).map(x=>x.sig_path),r0.data.presenter_sig].filter(Boolean);
+    if(files.length){const rm=await sb.storage.from(SB_BUCKET).remove(files);if(rm.error)throw rm.error}
+    const r=await sb.rpc('sb_purge_cancelled',{p_briefing:id});if(r.error)throw r.error;
+  }catch(e){toast('המחיקה נכשלה: '+sbErrText(e),5000);return}
+  SB.list=SB.list.filter(x=>x.id!==id);if(SB.cur&&SB.cur.id===id){SB.cur=null;SB.parts=[]}
+  toast('התדריך המבוטל נמחק');sbAfterChange();
 }
 function sbCancel(id){
   const b=SB.list.find(x=>x.id===id);if(!b||!S.admin)return;

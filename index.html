@@ -202,7 +202,7 @@ const ALL_ITEMS=[];
 CATS.forEach(c=>{c.Q=[];c.ITEMS=[];c.secs.forEach((sc,si)=>{const sid=c.id+'-'+sc.id;c.Q.push({id:sid,t:sc.t});sc.items.forEach(([t,ty],ii)=>{const it={key:`${c.p}${si+1}-${String(ii+1).padStart(2,'0')}`,sid,secT:sc.t,t,ty,cat:c.id,n:c.ITEMS.length+1};c.ITEMS.push(it);ALL_ITEMS.push(it)})})});
 const IT=Object.fromEntries(ALL_ITEMS.map(x=>[x.key,x]));
 let Q=[],ITEMS=[];
-function setCat(id){const c=CAT[id]||CAT.shul;Q=c.Q;ITEMS=c.ITEMS;return c}
+function setCat(id,v){const c=CAT[id]||CAT.shul;const l=(typeof qtCatItems==='function')?qtCatItems(c,v):null;Q=c.Q;ITEMS=l||c.ITEMS;ITEMS.forEach(x=>IT[x.key]=x);return c}
 const catName=id=>(CAT[id]||{}).t||'';
 const STAT={draft:'טיוטה',done:'הושלמה',handling:'בטיפול',closed:'נסגרה'};
 const DSTAT={open:'פתוח',progress:'בטיפול',fixed:'תוקן',closed:'נסגר'};
@@ -299,6 +299,7 @@ async function loadAll(quiet){
     const me=S.profiles[S.uid];
     if(me){S.profile=me;S.admin=!!(me.is_admin&&me.active);if(!me.active){location.reload();return}}
     S.audits.all=au.data.map(rowToAudit);
+    await loadQT();
     S.defects=de.data.map(rowToDefect);
     S.loaded=true;S.slow=false;S.err=null;
     if(S.admin){try{const pr2=await sb.rpc('pending_requests');if(!pr2.error){pending=pr2.data||[];S.pendingCount=pending.filter(x=>!x.rejected).length}}catch(e){}}
@@ -431,7 +432,7 @@ function shell(){
     <div class="tile" onclick="go('reports')" style="grid-column:1/-1;min-height:96px;flex-direction:row"><span class="ic">${ico('chart')}</span>דוחות ונתונים</div>
     <div class="tile" onclick="go('shabbat')" style="grid-column:1/-1;min-height:96px;flex-direction:row"><span class="ic">${ico('sb')}</span>תדריך שבת</div>
    </div><div class="sec-h"><h2>ביקורות אחרונות</h2></div><div class="lst" id="recent"></div>`;
-  else if(S.view==='audits')m.innerHTML=`<div class="sec-h"><h2>ביקורות שמורות</h2></div>
+  else if(S.view==='audits')m.innerHTML=`<div class="sec-h"><h2>ביקורות שמורות</h2>${S.admin?`<button class="btn sm ghost" onclick="go('qtpl')">⚙️ ניהול שאלות</button>`:''}</div>
    <input class="in" id="q" placeholder="חיפוש: מספר ביקורת, יחידה, מבקר, מיקום" oninput="render()">
    <div class="grid2"><div><label class="f">מתאריך</label><input class="in" type="date" id="from" onchange="render()"></div><div><label class="f">עד תאריך</label><input class="in" type="date" id="to" onchange="render()"></div></div>
    <div class="chips" id="stc" style="margin-top:10px"></div><div class="lst" id="list"></div>`;
@@ -444,6 +445,7 @@ function shell(){
   else if(S.view==='sb')sbEditorShell();
   else if(S.view==='sb-archive')sbArchiveShell();
   else if(S.view==='sb-tpl')sbTplShell();
+  else if(S.view==='qtpl')qtShell();
   else m.innerHTML=`<div id="dyn"></div>`;
   renderHdr();
 }
@@ -502,28 +504,30 @@ function renderAudits(){
 
 /* ============ טופס ביקורת ============ */
 function blank(cat){const n=nowISO();return{cat,number:genNum(),createdAt:n,createdBy:S.uid||'local',unit:'',location:'',status:'draft',answers:{},sectionNotes:{},summary:{keep:'',improve:'',goals:'',cc:''},history:[{at:n,by:S.uid||'local',act:'הביקורת נפתחה'}]}}
-function newAudit(cat){
+async function newAudit(cat){
   if(!canWriteShared()){toast('אין לך הרשאה לפתוח ביקורת');location.hash='home';return}
   if(!CAT[cat]){go('new');return}
-  setCat(cat);
-  S.cur={owner:S.uid||'local',data:blank(cat),dirty:false,editable:true,isNew:true,open:{}};
+  await loadQT();
+  setCat(cat,QT.cur);
+  S.cur={owner:S.uid||'local',data:blank(cat),dirty:false,editable:true,isNew:true,open:{}};S.cur.data.tplv=QT.cur;
   S.save={state:'idle'};
   location.hash='edit';if(S.view==='edit'||location.hash==='#edit'){S.view='edit';shell()}
 }
 function openAudit(owner,id){
   const a=allAudits().find(x=>x._owner===owner&&x.id===id);if(!a)return;
-  const d=clone(a);delete d._owner;delete d.id;if(!d.cat)d.cat='shul';setCat(d.cat);
+  const d=clone(a);delete d._owner;delete d.id;if(!d.cat)d.cat='shul';setCat(d.cat,d.tplv||0);
   S.cur={owner,data:d,dirty:false,editable:canEditAudit(a),open:{}};
   S.save={state:'saved'};
   S.view='edit';location.hash='edit';shell();
 }
 function restorePending(){
   const p=LS.get('ogmar96:cur');if(!p)return;
-  setCat(p.data.cat);S.cur={owner:p.owner,data:p.data,dirty:true,editable:true,open:{}};S.save={state:'local'};
+  setCat(p.data.cat,p.data.tplv||0);S.cur={owner:p.owner,data:p.data,dirty:true,editable:true,open:{}};S.save={state:'local'};
   S.view='edit';location.hash='edit';shell();if(sb)saveCur();
 }
 function leaveEditor(){if(S.cur&&S.cur.dirty)saveCur();go('audits')}
 function renderEditor(){
+  setCat(S.cur.data.cat,S.cur.data.tplv||0);
   const c=S.cur,d=c.data,ro=!c.editable,dis=ro?'disabled':'',rdo=ro?'readonly':'';
   const units=[...new Set([...DEMO_UNITS,...allAudits().map(a=>a.unit).filter(Boolean)])];
   let h=`<div class="ahead"><div class="row"><div class="grow"><div class="cathd">${CAT[d.cat]?CAT[d.cat].ic:''} ביקורת ${esc(catName(d.cat))}</div><div class="small">מספר ביקורת</div><div class="numbig">${esc(d.number)}</div></div><span class="pill" id="pill"></span></div>
@@ -895,7 +899,7 @@ function renderUsers(){
    <div class="card"><div class="hist">${logRows.map(l=>`<div>${fmtDT(l.at)} · ${esc(nameOf(l.actor))} · ${esc(LOGTXT[l.entity+':'+l.action]||(l.entity+' '+l.action))} <span class="ltr">${esc(l.entity_id||'')}</span></div>`).join('')||'אין רשומות'}</div></div>`;
   document.querySelectorAll('#dyn input:not([type=file]),#dyn select').forEach(x=>{const k=x.id||Object.keys(x.dataset).map(d=>d+'='+x.dataset[d]).join('|');if(k in keep){if(x.type==='checkbox')x.checked=keep[k];else x.value=keep[k]}});
 }
-const LOGTXT={'audits:insert':'ביקורת נוצרה','audits:update':'ביקורת עודכנה','audits:delete':'ביקורת נמחקה','defects:insert':'ליקוי נפתח','defects:update':'ליקוי עודכן','defects:delete':'ליקוי נמחק','profiles:update':'פרטי משתמש עודכנו','profiles:delete':'משתמש נמחק','profile:bootstrap_admin':'מנהל המערכת הראשון נרשם','profile:invite_claimed':'משתמש הפעיל הזמנה','profile:join_approved':'בקשת הצטרפות אושרה','profile:join_rejected':'בקשת הצטרפות נדחתה','profile:promoted_to_admin_via_sql':'מנהל הוגדר מלוח הבקרה','sb_briefings:insert':'תדריך שבת נפתח','sb_briefings:update':'תדריך שבת עודכן','sb_briefings:delete':'תדריך שבת נמחק','sb_briefings:presenter_signed':'מעביר התדריך חתם','sb_briefings:locked':'תדריך שבת אושר וננעל','sb_briefings:new_version':'נוצרה גרסה מתוקנת לתדריך','sb_briefings:export_pdf':'הופק PDF של תדריך שבת','sb_briefings:cancelled':'תדריך שבת בוטל והועבר לארכיון המבוטלים','sb_briefings:purged':'תדריך שבת מבוטל נמחק לצמיתות','sb_participants:insert':'משתתף נוסף לתדריך','sb_participants:update':'משתתף בתדריך עודכן','sb_participants:delete':'משתתף הוסר מתדריך','sb_participants:signed':'משתתף חתם על תדריך','sb_templates:template_saved':'תבנית תדריך עודכנה'};
+const LOGTXT={'audits:insert':'ביקורת נוצרה','audits:update':'ביקורת עודכנה','audits:delete':'ביקורת נמחקה','defects:insert':'ליקוי נפתח','defects:update':'ליקוי עודכן','defects:delete':'ליקוי נמחק','profiles:update':'פרטי משתמש עודכנו','profiles:delete':'משתמש נמחק','profile:bootstrap_admin':'מנהל המערכת הראשון נרשם','profile:invite_claimed':'משתמש הפעיל הזמנה','profile:join_approved':'בקשת הצטרפות אושרה','profile:join_rejected':'בקשת הצטרפות נדחתה','profile:promoted_to_admin_via_sql':'מנהל הוגדר מלוח הבקרה','audit_templates:template_saved':'שאלון הביקורת עודכן (גרסה חדשה)','sb_briefings:insert':'תדריך שבת נפתח','sb_briefings:update':'תדריך שבת עודכן','sb_briefings:delete':'תדריך שבת נמחק','sb_briefings:presenter_signed':'מעביר התדריך חתם','sb_briefings:locked':'תדריך שבת אושר וננעל','sb_briefings:new_version':'נוצרה גרסה מתוקנת לתדריך','sb_briefings:export_pdf':'הופק PDF של תדריך שבת','sb_briefings:cancelled':'תדריך שבת בוטל והועבר לארכיון המבוטלים','sb_briefings:purged':'תדריך שבת מבוטל נמחק לצמיתות','sb_participants:insert':'משתתף נוסף לתדריך','sb_participants:update':'משתתף בתדריך עודכן','sb_participants:delete':'משתתף הוסר מתדריך','sb_participants:signed':'משתתף חתם על תדריך','sb_templates:template_saved':'תבנית תדריך עודכנה'};
 async function downloadBackup(){
   toast('מכין גיבוי…');
   const [a,d,p]=await Promise.all([sb.from('audits').select('*'),sb.from('defects').select('*'),sb.from('profiles').select('*')]);
@@ -1141,7 +1145,7 @@ async function makePdf(blocksFn,runLabel,filename){
   finally{pdfBusy=false;pdfProgress(null);PJ=null}
 }
 function auditBlocks(d,owner){return async()=>{
-  setCat(d.cat);
+  setCat(d.cat,d.tplv||0);
   const emb=await embData(),ans=d.answers||{},sm=d.summary||{};
   const cnt=k=>ITEMS.filter(i=>ans[i.key]&&ans[i.key].v===k).length;
   const B=[`<div class="rp-head"><img src="${emb}"/><div class="rp-h1">דוח ביקורת רבנות – ${esc(catName(d.cat))}</div><div class="rp-h2">רבנות אוגמ״ר 96</div><div class="rp-sl">כשרות זה מקצוע – והיה מחנך קדוש</div></div>
@@ -1568,10 +1572,20 @@ function sbRenderApprove(){
     <div class="grid2 small"><div>שם: <b>${esc(c.presenter_first)} ${esc(c.presenter_last)}</b></div><div>דרגה: <b>${esc(c.presenter_rank)}</b></div><div>תפקיד: <b>${esc(c.presenter_role)}</b></div><div>מספר אישי: <b class="ltr">${esc(c.presenter_pn)}</b></div><div>תאריך ושעה: <b>${fmtDT(c.approved_at||nowISO())}</b></div></div>
     <label class="f">חתימת מעביר התדריך</label>
     ${c.presenter_sig?`<img class="sigimg" src="${PH_PH}" data-sbsig="${esc(c.presenter_sig)}" alt="חתימת מעביר התדריך"><div class="small">נחתם ${fmtDT(c.presenter_signed_at)}</div>`:(ro?'<div class="small">טרם נחתם</div>':`<canvas class="sig" id="sbPresPad" style="background:#fff"></canvas><div class="row" style="margin-top:6px"><button class="btn sm ghost" onclick="SB.presPad&&SB.presPad.clear()">נקה חתימה</button><button class="btn sm" id="sbPresOk" onclick="sbSignPresenter()">אשר חתימה</button></div>`)}</div>
-   ${c.status==='locked'?'':(miss.length?`<div class="banner bad"><b>עדיין לא ניתן לאשר:</b>${miss.map(x=>`<div>• ${esc(x)}</div>`).join('')}</div>`:'<div class="banner info">כל התנאים מולאו. אפשר לאשר ולנעול.</div>')}
+   ${c.status==='locked'?'':(miss.length?`<div class="banner bad"><b>עדיין לא ניתן לאשר:</b>${miss.map(x=>`<div>• ${esc(x)}</div>`).join('')}${sbFixList(c)}</div>`:'<div class="banner info">כל התנאים מולאו. אפשר לאשר ולנעול.</div>')}
    ${ro?'':`<button class="btn block" style="margin-top:6px" onclick="sbLock()" ${miss.length?'disabled':''}>אישור סופי ונעילת התדריך</button>`}`;
   if(!ro&&!c.presenter_sig){const cv=$('#sbPresPad');if(cv)SB.presPad=sbPad(cv)}
   sbHydrateSigs(el);
+}
+/* רשימת הסעיפים שחסר בהם סימון או סיבה – לחיצה מעבירה ישר לסעיף */
+function sbFixList(c){
+  const it=sbItems(c).filter(x=>{const a=sbAns(c,x.id);return !['done','not','na'].includes(a.s)||(['not','na'].includes(a.s)&&!(a.reason||'').trim())});
+  if(!it.length)return '';
+  return `<div style="margin-top:8px"><b>הסעיפים שצריך להשלים (לחץ כדי לעבור אליהם):</b>${it.map(x=>{const a=sbAns(c,x.id);return `<button class="link" style="display:block;text-align:right;color:inherit;text-decoration:underline" onclick="sbJump('${x.id}')">${esc(x.cat)}: ${esc(x.text)} <span class="small">(${['not','na'].includes(a.s)?'חסרה סיבה':'לא סומן'})</span></button>`}).join('')}</div>`;
+}
+function sbJump(id){
+  const c=SB.cur;if(!c)return;const ci=c.items.findIndex(cat=>(cat.items||[]).some(x=>x.id===id));if(ci<0)return;
+  sbGo(ci+1);setTimeout(()=>{const el=document.getElementById('sbi-'+id);if(el){el.scrollIntoView({block:'center'});el.style.boxShadow='0 0 0 3px var(--gold)';setTimeout(()=>el.style.boxShadow='',2500)}},80);
 }
 async function sbSignPresenter(){
   const pad=SB.presPad,b=$('#sbPresOk');if(!pad||!pad.has()){toast('יש לחתום בתוך המסגרת');return}
@@ -1679,6 +1693,85 @@ async function sbPdfBlocks(b,parts){
    <div class="rp-meta" style="margin-top:14px;text-align:center">${esc(SB_DISCLAIMER)}</div>`,sec:'אישור מעביר התדריך',head:true});
   return B;
 }
+
+/* ============ ניהול שאלות הביקורת (מנהל המערכת) ============ */
+/* כל שמירה יוצרת גרסה חדשה בטבלה audit_templates. כל ביקורת זוכרת את הגרסה שבה נפתחה (data.tplv).
+   ביקורת בלי tplv, או כשאין גרסה שמורה – משתמשת בשאלון המקורי שבקוד. */
+const QT={vers:{},cur:0,loaded:false,missing:false};
+const QE={work:null,cat:0,dirty:false,base:0};
+async function loadQT(){
+  if(!sb)return;
+  try{
+    const r=await sb.from('audit_templates').select('version,data').order('version',{ascending:true});
+    if(r.error){QT.missing=isMissingTable(r.error);return}
+    QT.vers={};(r.data||[]).forEach(x=>QT.vers[x.version]=x.data);
+    QT.cur=(r.data||[]).length?r.data[r.data.length-1].version:0;QT.loaded=true;QT.missing=false;
+  }catch(e){}
+}
+const TYL=()=>Object.entries(TY).map(([k,v])=>[k,`${v.g} / ${v.b}`]);
+const qtSec=si=>QE.work[QE.cat].secs[si];
+function qtShell(){
+  const el=$('#main');
+  if(!S.admin){el.innerHTML=`<div class="empty">מסך זה זמין למנהל המערכת בלבד.</div>`;return}
+  const head=`<div class="sec-h"><h2>ניהול שאלות הביקורת</h2><button class="btn sm ghost" onclick="qtBack()">חזרה</button></div>`;
+  if(QT.missing){el.innerHTML=head+`<div class="banner bad"><b>ניהול השאלות עדיין לא הותקן במסד הנתונים.</b><br>יש להריץ את עדכון SQL מספר 007 ב-Supabase.</div>`;return}
+  if(!QE.work){QE.work=qtWorkFrom(QT.cur);QE.base=QT.cur;QE.dirty=false;if(QE.cat>=QE.work.length)QE.cat=0}
+  const W=QE.work,cat=W[QE.cat];
+  el.innerHTML=head+`<div class="banner info">גרסת השאלון הנוכחית: <b>${QT.cur||'מקורית'}</b>. שמירה יוצרת גרסה חדשה, והיא חלה רק על ביקורות שייפתחו מעכשיו. ביקורות קיימות, דוחות ה-PDF והליקויים שלהן נשארים עם השאלות שלהן.</div>
+   ${W.length>1?`<div class="chips" style="margin-bottom:8px">${W.map((c,i)=>`<button class="chip ${i===QE.cat?'on':''}" onclick="QE.cat=${i};qtShell()">${esc(c.t)}</button>`).join('')}</div>`:''}
+   ${cat.secs.map((s,si)=>{const act=s.items.filter(x=>x.active!==false).length;return `<div class="card"><div class="row"><b class="grow">${esc(s.t)}</b><span class="small">${act} שאלות</span></div>
+     ${s.items.map((it,ii)=>it.active===false?`<div class="item v-na" style="opacity:.65"><div class="small"><s>${esc(it.t)}</s> · נמחקה</div><button class="btn sm ghost" style="margin-top:6px" onclick="qtRestore(${si},${ii})">שחזור</button></div>`:
+     `<div class="item"><div class="small ltr" style="text-align:right">${esc(it.key)}${it._new?' · חדשה':''}</div>
+       <textarea class="in" data-qtt="${si}:${ii}" style="min-height:52px" placeholder="נוסח השאלה">${esc(it.t)}</textarea>
+       <div class="row" style="margin-top:6px"><select class="in" data-qty="${si}:${ii}" style="flex:1;min-width:150px" aria-label="סוג התשובה">${TYL().map(([k,l])=>`<option value="${k}" ${it.ty===k?'selected':''}>${esc(l)}</option>`).join('')}</select>
+       <button class="btn sm ghost" onclick="qtMove(${si},${ii},-1)" ${ii===0?'disabled':''} aria-label="הזזה למעלה">▲</button><button class="btn sm ghost" onclick="qtMove(${si},${ii},1)" ${ii===s.items.length-1?'disabled':''} aria-label="הזזה למטה">▼</button>
+       <button class="btn sm danger" onclick="qtDel(${si},${ii})">מחיקה</button></div></div>`).join('')}
+     <button class="btn sm" style="margin-top:8px" onclick="qtAdd(${si})">＋ הוספת שאלה</button></div>`}).join('')}
+   <button class="btn block" id="qtSaveBtn" style="margin-top:8px" onclick="qtSave()" ${QE.dirty?'':'disabled'}>שמירת השאלון כגרסה חדשה</button>`;
+}
+function qtMark(){QE.dirty=true;const b=$('#qtSaveBtn');if(b)b.disabled=false}
+document.addEventListener('input',e=>{if(S.view!=='qtpl'||!QE.work)return;const t=e.target;
+  if(t.dataset.qtt){const[si,ii]=t.dataset.qtt.split(':').map(Number);qtSec(si).items[ii].t=t.value;qtMark()}});
+document.addEventListener('change',e=>{if(S.view!=='qtpl'||!QE.work)return;const t=e.target;
+  if(t.dataset.qty){const[si,ii]=t.dataset.qty.split(':').map(Number);qtSec(si).items[ii].ty=t.value;qtMark()}});
+function qtMove(si,ii,d){const a=qtSec(si).items,j=ii+d;if(j<0||j>=a.length)return;[a[ii],a[j]]=[a[j],a[ii]];QE.dirty=true;qtShell()}
+function qtAdd(si){
+  qtSec(si).items.push({key:qtNewKey(QE.cat,si),t:'',ty:'ok',active:true,_new:true});QE.dirty=true;qtShell();
+  setTimeout(()=>{const ts=document.querySelectorAll(`[data-qtt^="${si}:"]`),l=ts[ts.length-1];if(l){l.scrollIntoView({block:'center'});l.focus()}},50);
+}
+async function qtDel(si,ii){
+  const s=qtSec(si),it=s.items[ii];
+  if(s.items.filter(x=>x.active!==false).length<=1){toast('בכל פרק צריכה להישאר לפחות שאלה אחת');return}
+  if(!await ask('מחיקת שאלה',`<p>האם למחוק את השאלה?</p><p class="small">${esc(it.t||'(ללא נוסח)')}</p><p class="small">השאלה לא תופיע בביקורות חדשות. ביקורות קיימות לא ישתנו.</p>`,'מחיקה',true))return;
+  if(it._new)s.items.splice(ii,1);else it.active=false;QE.dirty=true;qtShell();
+}
+function qtRestore(si,ii){qtSec(si).items[ii].active=true;QE.dirty=true;qtShell()}
+async function qtBack(){
+  if(QE.dirty&&!await ask('יציאה בלי לשמור','<p>יש שינויים בשאלון שלא נשמרו. לצאת בכל זאת?</p>','יציאה',true))return;
+  QE.work=null;QE.dirty=false;go('audits');
+}
+async function qtSave(){
+  const W=QE.work;let empty=0;const emptySec=[];
+  W.forEach(c=>c.secs.forEach(s=>{s.items.forEach(i=>{i.t=String(i.t||'').trim();if(i.active!==false&&!i.t)empty++});if(!s.items.some(i=>i.active!==false))emptySec.push((W.length>1?c.t+' – ':'')+s.t)}));
+  if(empty){toast(`יש ${empty} שאלות בלי נוסח. כתוב נוסח או מחק אותן.`,4000);return}
+  if(emptySec.length){toast('בכל פרק צריכה להישאר לפחות שאלה אחת: '+emptySec[0],4500);return}
+  if(!await ask('שמירת השאלון',`<p>לשמור את השאלון כגרסה ${QE.base+1}?</p><p class="small">הגרסה החדשה תחול רק על ביקורות שייפתחו מעכשיו. ביקורות קיימות לא ישתנו.</p>`,'שמירה'))return;
+  const b=$('#qtSaveBtn');if(b)b.disabled=true;
+  const r=await sb.rpc('save_audit_template',{p_data:qtSerialize(W),p_base:QE.base});
+  if(r.error){if(b)b.disabled=false;toast('השמירה נכשלה: '+String(r.error.message||'').replace(/^.*?ERROR:\s*/,''),5000);return}
+  await loadQT();QE.work=null;QE.dirty=false;toast('השאלון נשמר כגרסה '+r.data+' ✓',3500);qtShell();
+}
+window.addEventListener('beforeunload',e=>{if(S.view==='qtpl'&&QE.dirty){e.preventDefault();e.returnValue=''}});
+/* התאמה לשאלון של אוגמ״ר 96: סוגי ביקורת ופרקים קבועים, שאלות לפי גרסה */
+function qtCatItems(c,v){const d=v&&QT.vers[v];const cd=d&&d.cats&&d.cats[c.id];if(!cd)return null;const out=[];
+  c.secs.forEach(sc=>{const sid=c.id+'-'+sc.id;const sec=(cd.secs||[]).find(x=>x.id===sc.id);const its=sec?sec.items:c.ITEMS.filter(x=>x.sid===sid);
+    its.filter(i=>i.active!==false).forEach(i=>out.push({key:i.key,sid,secT:sc.t,t:i.t,ty:TY[i.ty]?i.ty:'ok',cat:c.id,n:out.length+1}))});return out}
+function qtWorkFrom(v){const d=v&&QT.vers[v];return CATS.map(c=>{const cd=d&&d.cats&&d.cats[c.id];return{id:c.id,t:c.t,secs:c.secs.map(sc=>{const sid=c.id+'-'+sc.id;
+  const sec=cd&&(cd.secs||[]).find(x=>x.id===sc.id);const its=sec?sec.items:c.ITEMS.filter(x=>x.sid===sid);return{id:sc.id,t:sc.t,items:its.map(i=>({key:i.key,t:i.t,ty:i.ty,active:i.active!==false}))}})}})}
+function qtSerialize(W){const cats={};W.forEach(c=>cats[c.id]={secs:c.secs.map(s=>({id:s.id,items:s.items.map(i=>({key:i.key,t:i.t,ty:i.ty,active:i.active!==false}))}))});return{cats}}
+function qtNewKey(ci,si){const c=CATS.find(x=>x.id===QE.work[ci].id);const pre=`${c.p}${si+1}-`;const used=new Set(Object.keys(IT));
+  Object.values(QT.vers).forEach(d=>Object.values(d.cats||{}).forEach(cd=>(cd.secs||[]).forEach(s=>s.items.forEach(i=>used.add(i.key)))));
+  QE.work.forEach(c2=>c2.secs.forEach(s=>s.items.forEach(i=>used.add(i.key))));let n=0;used.forEach(k=>{if(k.startsWith(pre)){const m=+k.slice(pre.length);if(m>n)n=m}});return pre+String(n+1).padStart(2,'0')}
 
 init();
 </script>
